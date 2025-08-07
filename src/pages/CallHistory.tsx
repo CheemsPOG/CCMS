@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Search, Calendar, Play, Download, FileText } from "lucide-react";
+import { Search, Calendar, Download } from "lucide-react";
+import MDOutlinePlayArrow from "../components/ui/md-outline-play-arrow";
+import MdOutlineGeneratingTokens from "../components/ui/md-outline-generating-tokens";
 
 // Call history data
 const callHistoryData = [
@@ -350,13 +352,13 @@ export default function CallHistory() {
               <div className="text-[#718096] text-[14px]">{call.receiver}</div>
               <div className="flex gap-3">
                 <button className="text-[#718096] hover:text-[#4a5568] transition-colors">
-                  <Play className="w-4 h-4" />
+                  <MDOutlinePlayArrow size={16} title="Phát ghi âm" />
                 </button>
                 <button className="text-[#718096] hover:text-[#4a5568] transition-colors">
                   <Download className="w-4 h-4" />
                 </button>
                 <button className="text-[#718096] hover:text-[#4a5568] transition-colors">
-                  <FileText className="w-4 h-4" />
+                  <MdOutlineGeneratingTokens size={16} title="Tạo báo cáo" />
                 </button>
               </div>
               <div className="text-[#718096] text-[12px]">{call.summary}</div>

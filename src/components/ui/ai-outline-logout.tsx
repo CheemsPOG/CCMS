@@ -1,0 +1,53 @@
+interface AiOutlineLogoutProps {
+  className?: string;
+  size?: number;
+  onClick?: () => void;
+  title?: string;
+}
+
+/**
+ * Ant Design Outline Logout Icon Component
+ *
+ * This component renders a logout icon in the Ant Design outline style.
+ * It's designed to be interactive with hover effects and click handlers.
+ *
+ * @param className - Additional CSS classes to apply to the SVG
+ * @param size - Size of the icon (width and height)
+ * @param onClick - Click handler function
+ * @param title - Tooltip text for accessibility
+ */
+export function AiOutlineLogout({
+  className = "",
+  size = 16,
+  onClick,
+  title = "Logout",
+}: AiOutlineLogoutProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`cursor-pointer transition-colors duration-200 hover:text-[#4a5568] ${className}`}
+      onClick={onClick}
+      role="button"
+      aria-label={title}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      {/* Main logout icon path */}
+      <path
+        d="M13.5625 11.4375H12.4641C12.3891 11.4375 12.3188 11.4703 12.2719 11.5281C12.1625 11.6609 12.0453 11.789 11.9219 11.9109C11.417 12.4163 10.819 12.819 10.1609 13.0968C9.47916 13.3848 8.74637 13.5325 8.00626 13.5312C7.25782 13.5312 6.53282 13.3843 5.85157 13.0968C5.19349 12.819 4.59549 12.4163 4.09064 11.9109C3.58488 11.4072 3.1816 10.8103 2.90314 10.1531C2.61407 9.47184 2.46876 8.7484 2.46876 7.99996C2.46876 7.25153 2.61564 6.52809 2.90314 5.84684C3.18126 5.18903 3.58126 4.59684 4.09064 4.08903C4.60001 3.58121 5.1922 3.18121 5.85157 2.90309C6.53282 2.61559 7.25782 2.46871 8.00626 2.46871C8.7547 2.46871 9.4797 2.61403 10.1609 2.90309C10.8203 3.18121 11.4125 3.58121 11.9219 4.08903C12.0453 4.21246 12.1609 4.34059 12.2719 4.47184C12.3188 4.52965 12.3906 4.56246 12.4641 4.56246H13.5625C13.6609 4.56246 13.7219 4.45309 13.6672 4.37028C12.4688 2.50778 10.3719 1.27496 7.98907 1.28121C4.24532 1.29059 1.24376 4.32965 1.28126 8.06871C1.31876 11.7484 4.31564 14.7187 8.00626 14.7187C10.3828 14.7187 12.4703 13.4875 13.6672 11.6297C13.7203 11.5468 13.6609 11.4375 13.5625 11.4375ZM14.9516 7.90153L12.7344 6.15153C12.6516 6.0859 12.5313 6.14528 12.5313 6.24996V7.43746H7.62501C7.55626 7.43746 7.50001 7.49371 7.50001 7.56246V8.43746C7.50001 8.50621 7.55626 8.56246 7.62501 8.56246H12.5313V9.74996C12.5313 9.85465 12.6531 9.91403 12.7344 9.8484L14.9516 8.0984C14.9665 8.08671 14.9786 8.07177 14.9869 8.05471C14.9952 8.03766 14.9995 8.01894 14.9995 7.99996C14.9995 7.98099 14.9952 7.96227 14.9869 7.94521C14.9786 7.92816 14.9665 7.91322 14.9516 7.90153Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export default AiOutlineLogout;
