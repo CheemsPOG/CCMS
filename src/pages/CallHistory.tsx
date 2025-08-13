@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useState, useEffect } from "react";
 import { Search, Calendar } from "lucide-react";
 import MDOutlinePlayArrow from "../components/ui/md-outline-play-arrow";
@@ -5,6 +6,10 @@ import MdOutlineGeneratingTokens from "../components/ui/md-outline-generating-to
 import { getCallHistory } from "../lib/api";
 import { clearCallHistoryCache } from "../lib/cache";
 import Toast from "../components/ui/toast";
+=======
+import { useState } from "react";
+import { Search, Calendar, Play, Download, FileText } from "lucide-react";
+>>>>>>> parent of bb00de5 (Remove unused images and UI components; update CallHistory to use new icons.)
 
 // IndexedDB configuration
 const DB_NAME = "CallCenterDB";
@@ -546,7 +551,40 @@ export default function CallHistory() {
           </div>
         </div>
 
+<<<<<<< HEAD
         {/* Pagination */}
+=======
+        {/* Table rows */}
+        <div className="space-y-1">
+          {currentData.map((call, index) => (
+            <div
+              key={index}
+              className="grid grid-cols-6 gap-4 items-center py-1 border-b border-slate-100"
+            >
+              <div className="text-[#718096] text-[14px]">
+                {call.phoneNumber}
+              </div>
+              <div className="text-[#718096] text-[14px]">{call.dateTime}</div>
+              <div className="text-[#718096] text-[14px]">{call.duration}</div>
+              <div className="text-[#718096] text-[14px]">{call.receiver}</div>
+              <div className="flex gap-3">
+                <button className="text-[#718096] hover:text-[#4a5568] transition-colors">
+                  <Play className="w-4 h-4" />
+                </button>
+                <button className="text-[#718096] hover:text-[#4a5568] transition-colors">
+                  <Download className="w-4 h-4" />
+                </button>
+                <button className="text-[#718096] hover:text-[#4a5568] transition-colors">
+                  <FileText className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="text-[#718096] text-[12px]">{call.summary}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Dynamic Pagination */}
+>>>>>>> parent of bb00de5 (Remove unused images and UI components; update CallHistory to use new icons.)
         <div className="flex justify-between items-center mt-3">
           <div className="flex items-center gap-[22px] text-[#4a5568] text-[12px]">
             <span>Tổng cộng {totalItems}</span>
