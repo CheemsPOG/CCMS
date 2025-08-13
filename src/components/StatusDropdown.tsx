@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { ChevronDown, X } from "lucide-react";
+import { changeAgentStatus } from "../lib/api";
+import Toast from "./ui/toast";
 
 interface StatusDropdownProps {
   currentStatus: string;
@@ -12,24 +14,112 @@ interface StatusDropdownProps {
 const statusOptions = [
   { value: "Available", label: "Available", color: "bg-green-500" },
   { value: "Busy", label: "Busy", color: "bg-red-500" },
-  { value: "Away", label: "Away", color: "bg-yellow-500" },
-  { value: "Do Not Disturb", label: "Do Not Disturb", color: "bg-gray-500" },
+  { value: "Break", label: "Break", color: "bg-yellow-500" },
 ];
 
-// Content options for the dropdown
-const contentOptions = [
-  "Giải khát",
-  "Ăn trưa",
-  "Đào tạo",
-  "Họp",
-  "Thực hiện cuộc gọi ra",
-  "Hỗ trợ khách hàng",
-  "Báo cáo",
-  "Thư giãn, giải trí",
-  "Đi vệ sinh",
-  "Hỗ trợ khách hàng qua kênh chat",
-  "Ghi nhận thông tin sau khi tiếp nhận cuộc gọi",
-];
+// Content options for each category
+const contentOptionsByCategory = {
+  Available: ["DND Off"],
+  Busy: [
+    // "Không lý do" under Busy will map to DND Normal (-1)
+    "Không lý do",
+    "Tra thông tin",
+    "Họp",
+    "Gọi ra",
+    "Hỗ trợ KH",
+    "Báo cáo",
+    "Livechat",
+    "ACW",
+  ],
+  Break: ["Giải khát", "Ăn trưa", "Đào tạo", "Thư giãn", "Đi vệ sinh"],
+};
+
+// Map status string to status ID (should match Layout's mapping)
+const statusStringToId = (str: string): number => {
+  switch (str) {
+    case "DND Off":
+      return -2;
+    case "DND Normal":
+      return -1;
+    case "Không lý do":
+      return -1; // Alias shown under Busy category
+    case "Không lí do":
+      return -1; // support both spellings
+    case "Tra thông tin":
+      return 0;
+    case "Tra cứu thông tin":
+      return 0; // support Layout label variant
+    case "Giải khát":
+      return 1;
+    case "Ăn trưa":
+      return 2;
+    case "Đào tạo":
+      return 3;
+    case "Họp":
+      return 4;
+    case "Gọi ra":
+      return 5;
+    case "Hỗ trợ KH":
+      return 6;
+    case "Báo cáo":
+      return 7;
+    case "Thư giãn":
+      return 8;
+    case "Đi vệ sinh":
+      return 9;
+    case "Livechat":
+      return 10;
+    case "ACW":
+      return 11;
+    default:
+      return -1;
+  }
+};
+
+// Map Vietnamese status text to category and content
+const getStatusCategoryFromText = (
+  statusText: string
+): { category: string; content: string } => {
+  switch (statusText) {
+    case "DND Off":
+      return { category: "Available", content: "DND Off" };
+    case "DND Normal":
+      // Show DND Normal under Busy as "Không lý do"
+      return { category: "Busy", content: "Không lý do" };
+    case "Không lý do":
+      return { category: "Busy", content: "Không lý do" };
+    case "Không lí do":
+      return { category: "Busy", content: "Không lý do" };
+    case "Tra thông tin":
+      return { category: "Busy", content: "Tra thông tin" };
+    case "Tra cứu thông tin":
+      return { category: "Busy", content: "Tra thông tin" }; // normalize to one label
+    case "Giải khát":
+      return { category: "Break", content: "Giải khát" };
+    case "Ăn trưa":
+      return { category: "Break", content: "Ăn trưa" };
+    case "Đào tạo":
+      return { category: "Break", content: "Đào tạo" };
+    case "Họp":
+      return { category: "Busy", content: "Họp" };
+    case "Gọi ra":
+      return { category: "Busy", content: "Gọi ra" };
+    case "Hỗ trợ KH":
+      return { category: "Busy", content: "Hỗ trợ KH" };
+    case "Báo cáo":
+      return { category: "Busy", content: "Báo cáo" };
+    case "Thư giãn":
+      return { category: "Break", content: "Thư giãn" };
+    case "Đi vệ sinh":
+      return { category: "Break", content: "Đi vệ sinh" };
+    case "Livechat":
+      return { category: "Busy", content: "Livechat" };
+    case "ACW":
+      return { category: "Busy", content: "ACW" };
+    default:
+      return { category: "Available", content: statusText };
+  }
+};
 
 export default function StatusDropdown({
   currentStatus,
@@ -38,10 +128,15 @@ export default function StatusDropdown({
   onTriggerReset,
 }: StatusDropdownProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState(currentStatus);
+  const [selectedCategory, setSelectedCategory] = useState("Available");
+  const [selectedContent, setSelectedContent] = useState("");
   const [notes, setNotes] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isContentDropdownOpen, setIsContentDropdownOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isToastVisible, setIsToastVisible] = useState(false);
+  const [toastType, setToastType] = useState<"success" | "error">("success");
 
   // Handle external trigger to open modal
   React.useEffect(() => {
@@ -51,44 +146,108 @@ export default function StatusDropdown({
     }
   }, [triggerOpen]);
 
-  // Get current status color
+  // Get current status color based on category
   const getCurrentStatusColor = () => {
-    const status = statusOptions.find((s) => s.value === currentStatus);
+    const { category } = getStatusCategoryFromText(currentStatus);
+    const status = statusOptions.find((s) => s.value === category);
     return status?.color || "bg-green-500";
   };
 
   // Handle opening the modal
   const handleStatusClick = () => {
     setIsModalOpen(true);
-    setSelectedStatus(currentStatus);
+    const { category, content } = getStatusCategoryFromText(currentStatus);
+    setSelectedCategory(category);
+    setSelectedContent(content);
     setNotes("");
   };
 
   // Handle closing the modal
   const handleCancel = () => {
     setIsModalOpen(false);
-    setSelectedStatus(currentStatus);
+    const { category, content } = getStatusCategoryFromText(currentStatus);
+    setSelectedCategory(category);
+    setSelectedContent(content);
     setNotes("");
     setIsDropdownOpen(false);
     setIsContentDropdownOpen(false);
   };
 
   // Handle confirming status change
-  const handleConfirm = () => {
-    onStatusChange(selectedStatus, notes);
-    setIsModalOpen(false);
-    setIsDropdownOpen(false);
+  const handleConfirm = async () => {
+    setLoading(true);
+    try {
+      // Ensure a content is selected; if not, pick the first content for the chosen category
+      const categoryContents =
+        contentOptionsByCategory[
+          selectedCategory as keyof typeof contentOptionsByCategory
+        ] || [];
+      const finalContent =
+        selectedContent || categoryContents[0] || currentStatus;
+
+      // Map display text to numeric string IDs expected by API
+      const oldMapped = statusStringToId(currentStatus);
+      const newMapped = statusStringToId(finalContent);
+      const oldStatusId = String(oldMapped);
+      const newStatusId = String(newMapped);
+      await changeAgentStatus({
+        oldStatus: oldStatusId,
+        newStatus: newStatusId,
+      });
+      onStatusChange(finalContent, notes);
+      setIsModalOpen(false);
+      setIsDropdownOpen(false);
+      setToastMessage("Trạng thái đã được cập nhật thành công!");
+      setToastType("success");
+      setIsToastVisible(true);
+    } catch (e: any) {
+      // Handle different types of errors with Vietnamese messages
+      let errorMessage = "Lỗi khi đổi trạng thái";
+
+      if (e && e.message) {
+        if (
+          e.message.includes("Failed to fetch") ||
+          e.message.includes("NetworkError")
+        ) {
+          errorMessage = "Không thể kết nối đến máy chủ";
+        } else if (e.message.includes("401")) {
+          errorMessage = "Phiên đăng nhập đã hết hạn";
+        } else if (e.message.includes("500")) {
+          errorMessage = "Lỗi máy chủ nội bộ";
+        } else if (e.message.includes("404")) {
+          errorMessage = "Không tìm thấy dịch vụ";
+        } else if (e.message.includes("403")) {
+          errorMessage = "Không có quyền truy cập";
+        } else if (e.message.includes("400")) {
+          errorMessage = "Dữ liệu không hợp lệ";
+        } else {
+          errorMessage = "Lỗi khi đổi trạng thái";
+        }
+      }
+
+      // Show error toast
+      setToastMessage(errorMessage);
+      setToastType("error");
+      setIsToastVisible(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Handle status selection from dropdown
-  const handleStatusSelect = (status: string) => {
-    setSelectedStatus(status);
+  // Handle category selection from dropdown
+  const handleCategorySelect = (category: string) => {
+    setSelectedCategory(category);
+    const firstContent =
+      contentOptionsByCategory[
+        category as keyof typeof contentOptionsByCategory
+      ]?.[0] || "";
+    setSelectedContent(firstContent);
     setIsDropdownOpen(false);
   };
 
   // Handle content selection from dropdown
   const handleContentSelect = (content: string) => {
-    setNotes(content);
+    setSelectedContent(content);
     setIsContentDropdownOpen(false);
   };
 
@@ -97,7 +256,20 @@ export default function StatusDropdown({
       {/* Status display - non-clickable */}
       <div className="flex items-center gap-1">
         <div className={`w-3 h-3 rounded-full ${getCurrentStatusColor()}`} />
-        <span className="text-[#718096] text-[14px]">{currentStatus}</span>
+        <span className="text-[#718096] text-[14px]">
+          {(() => {
+            const { category, content } =
+              getStatusCategoryFromText(currentStatus);
+
+            // Show simple text for Available only
+            if (category === "Available") {
+              return category;
+            }
+
+            // Show Category - Content format for others
+            return `${category} - ${content}`;
+          })()}
+        </span>
       </div>
 
       {/* Modal overlay */}
@@ -138,13 +310,13 @@ export default function StatusDropdown({
                   <div className="flex items-center gap-2">
                     <div
                       className={`w-3 h-3 rounded-full ${
-                        statusOptions.find((s) => s.value === selectedStatus)
+                        statusOptions.find((s) => s.value === selectedCategory)
                           ?.color
                       }`}
                     />
                     <span className="text-[#2d3748] text-[14px]">
                       {
-                        statusOptions.find((s) => s.value === selectedStatus)
+                        statusOptions.find((s) => s.value === selectedCategory)
                           ?.label
                       }
                     </span>
@@ -162,7 +334,7 @@ export default function StatusDropdown({
                     {statusOptions.map((status) => (
                       <button
                         key={status.value}
-                        onClick={() => handleStatusSelect(status.value)}
+                        onClick={() => handleCategorySelect(status.value)}
                         className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-gray-50 transition-colors first:rounded-t-md last:rounded-b-md"
                       >
                         <div
@@ -178,64 +350,80 @@ export default function StatusDropdown({
               </div>
             </div>
 
-            {/* Content dropdown section */}
-            <div className="mb-6">
-              <label className="block text-[#2d3748] text-[14px] font-medium mb-2">
-                Nội dung
-              </label>
-              <div className="relative">
-                <button
-                  onClick={() =>
-                    setIsContentDropdownOpen(!isContentDropdownOpen)
-                  }
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-left flex items-center justify-between hover:border-gray-400 transition-colors"
-                >
-                  <span className="text-[#2d3748] text-[14px]">
-                    {notes || "Chọn nội dung"}
-                  </span>
-                  <ChevronDown
-                    className={`w-4 h-4 text-gray-500 transition-transform ${
-                      isContentDropdownOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
+            {/* Content dropdown section - only show for Busy and Break categories */}
+            {(selectedCategory === "Busy" || selectedCategory === "Break") && (
+              <div className="mb-6">
+                <label className="block text-[#2d3748] text-[14px] font-medium mb-2">
+                  Nội dung
+                </label>
+                <div className="relative">
+                  <button
+                    onClick={() =>
+                      setIsContentDropdownOpen(!isContentDropdownOpen)
+                    }
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-left flex items-center justify-between hover:border-gray-400 transition-colors"
+                  >
+                    <span className="text-[#2d3748] text-[14px]">
+                      {selectedContent || "Chọn nội dung"}
+                    </span>
+                    <ChevronDown
+                      className={`w-4 h-4 text-gray-500 transition-transform ${
+                        isContentDropdownOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
 
-                {/* Content dropdown options */}
-                {isContentDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
-                    {contentOptions.map((content) => (
-                      <button
-                        key={content}
-                        onClick={() => handleContentSelect(content)}
-                        className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors first:rounded-t-md last:rounded-b-md"
-                      >
-                        <span className="text-[#2d3748] text-[14px]">
-                          {content}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                  {/* Content dropdown options */}
+                  {isContentDropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
+                      {contentOptionsByCategory[
+                        selectedCategory as keyof typeof contentOptionsByCategory
+                      ]?.map((content) => (
+                        <button
+                          key={content}
+                          onClick={() => handleContentSelect(content)}
+                          className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors first:rounded-t-md last:rounded-b-md"
+                        >
+                          <span className="text-[#2d3748] text-[14px]">
+                            {content}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Action buttons */}
             <div className="flex gap-3 justify-end">
               <button
                 onClick={handleCancel}
                 className="px-4 py-2 text-[#718096] text-[14px] font-medium border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                disabled={loading}
               >
                 Hủy
               </button>
               <button
                 onClick={handleConfirm}
                 className="px-4 py-2 bg-[#2b6cb0] text-white text-[14px] font-medium rounded-md hover:bg-[#2557a7] transition-colors"
+                disabled={loading}
               >
-                Xác nhận
+                {loading ? "Đang lưu..." : "Xác nhận"}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Toast notification */}
+      {toastMessage && (
+        <Toast
+          message={toastMessage}
+          isVisible={isToastVisible}
+          onClose={() => setIsToastVisible(false)}
+          type={toastType}
+        />
       )}
     </>
   );

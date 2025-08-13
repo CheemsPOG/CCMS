@@ -1,255 +1,395 @@
-import { useState } from "react";
-import { Search, Calendar, Download } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Calendar } from "lucide-react";
 import MDOutlinePlayArrow from "../components/ui/md-outline-play-arrow";
 import MdOutlineGeneratingTokens from "../components/ui/md-outline-generating-tokens";
+import { getCallHistory } from "../lib/api";
+import { clearCallHistoryCache } from "../lib/cache";
+import Toast from "../components/ui/toast";
 
-// Call history data
-const callHistoryData = [
-  {
-    phoneNumber: "0987 654 321",
-    dateTime: "15/05/2024 11:20",
-    duration: "00:08:15",
-    receiver: "minh.vu",
-    summary: "Khách hàng cần hỗ trợ kỹ thuật về kết nối mạng.",
+// IndexedDB configuration
+const DB_NAME = "CallCenterDB";
+const DB_VERSION = 1;
+const STORE_NAME = "callHistory";
+
+// Initialize IndexedDB
+const initDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+      }
+    };
+  });
+};
+
+// Storage operations with fallback
+const storage = {
+  async save(data: any[], searchState: any) {
+    try {
+      const db = await initDB();
+      const transaction = db.transaction([STORE_NAME], "readwrite");
+      const store = transaction.objectStore(STORE_NAME);
+
+      await Promise.all([
+        this.promisifyRequest(
+          store.put({ id: "callHistoryData", data, timestamp: Date.now() })
+        ),
+        this.promisifyRequest(
+          store.put({
+            id: "searchState",
+            data: searchState,
+            timestamp: Date.now(),
+          })
+        ),
+      ]);
+      console.log("Data saved to IndexedDB");
+    } catch (error) {
+      console.warn("IndexedDB failed, falling back to localStorage:", error);
+      this.saveToLocalStorage(data, searchState);
+    }
   },
-  {
-    phoneNumber: "0378 123 456",
-    dateTime: "15/05/2024 10:45",
-    duration: "00:02:30",
-    receiver: "linh.nguyen",
-    summary: "Hỏi về thủ tục đăng ký dịch vụ mới.",
+
+  async load() {
+    try {
+      const db = await initDB();
+      const transaction = db.transaction([STORE_NAME], "readonly");
+      const store = transaction.objectStore(STORE_NAME);
+
+      const [dataResult, searchResult] = await Promise.all([
+        this.promisifyRequest(store.get("callHistoryData")),
+        this.promisifyRequest(store.get("searchState")),
+      ]);
+
+      if (dataResult && searchResult) {
+        console.log("Data loaded from IndexedDB");
+        return { data: dataResult.data, searchState: searchResult.data };
+      }
+    } catch (error) {
+      console.warn("IndexedDB failed, trying localStorage:", error);
+    }
+    return this.loadFromLocalStorage();
   },
-  {
-    phoneNumber: "0865 555 789",
-    dateTime: "14/05/2024 17:12",
-    duration: "00:12:45",
-    receiver: "tuan.tran",
-    summary: "Phản ánh về thái độ phục vụ của nhân viên.",
+
+  async clear() {
+    // Delegate to shared util for consistency
+    await clearCallHistoryCache();
   },
-  {
-    phoneNumber: "0599 888 111",
-    dateTime: "14/05/2024 15:05",
-    duration: "00:06:22",
-    receiver: "minh.vu",
-    summary: "Yêu cầu thay đổi gói cước hiện tại.",
+
+  promisifyRequest(request: IDBRequest) {
+    return new Promise<any>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
   },
-  {
-    phoneNumber: "0707 234 567",
-    dateTime: "13/05/2024 14:30",
-    duration: "00:05:55",
-    receiver: "phuong.ho",
-    summary: "Thắc mắc về hóa đơn cước tháng trước.",
+
+  saveToLocalStorage(data: any[], searchState: any) {
+    try {
+      localStorage.setItem("callHistoryData", JSON.stringify(data));
+      localStorage.setItem(
+        "callHistorySearchState",
+        JSON.stringify(searchState)
+      );
+      console.log("Data saved to localStorage (fallback)");
+    } catch (error) {
+      console.error("localStorage failed:", error);
+      localStorage.removeItem("callHistoryData");
+      localStorage.removeItem("callHistorySearchState");
+    }
   },
-  {
-    phoneNumber: "0918 765 432",
-    dateTime: "13/05/2024 11:11",
-    duration: "00:09:03",
-    receiver: "tuan.tran",
-    summary: "Góp ý về việc cải thiện chất lượng ứng dụng.",
+
+  loadFromLocalStorage() {
+    try {
+      const cachedData = localStorage.getItem("callHistoryData");
+      const cachedSearchState = localStorage.getItem("callHistorySearchState");
+      if (cachedData && cachedSearchState) {
+        console.log("Data loaded from localStorage (fallback)");
+        return {
+          data: JSON.parse(cachedData),
+          searchState: JSON.parse(cachedSearchState),
+        };
+      }
+    } catch (error) {
+      console.error("Failed to load cached data:", error);
+    }
+    return null;
   },
-  {
-    phoneNumber: "0333 456 789",
-    dateTime: "13/05/2024 09:50",
-    duration: "00:03:18",
-    receiver: "linh.nguyen",
-    summary: "Xác nhận thông tin về chương trình giảm giá.",
-  },
-  {
-    phoneNumber: "0888 999 000",
-    dateTime: "12/05/2024 16:45",
-    duration: "00:15:01",
-    receiver: "minh.vu",
-    summary: "Khiếu nại về việc giao hàng chậm trễ.",
-  },
-  {
-    phoneNumber: "0945 111 222",
-    dateTime: "12/05/2024 14:20",
-    duration: "00:04:44",
-    receiver: "phuong.ho",
-    summary: "Hủy dịch vụ và yêu cầu hoàn tiền.",
-  },
-  {
-    phoneNumber: "0777 333 444",
-    dateTime: "12/05/2024 10:05",
-    duration: "00:07:39",
-    receiver: "tuan.tran",
-    summary: "Tư vấn về sản phẩm mới ra mắt.",
-  },
-  {
-    phoneNumber: "0966 777 888",
-    dateTime: "11/05/2024 16:30",
-    duration: "00:11:22",
-    receiver: "linh.nguyen",
-    summary: "Khiếu nại về chất lượng sản phẩm đã mua.",
-  },
-  {
-    phoneNumber: "0844 555 666",
-    dateTime: "11/05/2024 14:15",
-    duration: "00:05:33",
-    receiver: "minh.vu",
-    summary: "Hỏi về chính sách bảo hành sản phẩm.",
-  },
-  {
-    phoneNumber: "0722 999 111",
-    dateTime: "11/05/2024 11:45",
-    duration: "00:08:47",
-    receiver: "phuong.ho",
-    summary: "Yêu cầu hỗ trợ cài đặt ứng dụng mobile.",
-  },
-  {
-    phoneNumber: "0633 444 777",
-    dateTime: "10/05/2024 17:20",
-    duration: "00:03:12",
-    receiver: "tuan.tran",
-    summary: "Xác nhận thông tin địa chỉ giao hàng.",
-  },
-  {
-    phoneNumber: "0511 222 333",
-    dateTime: "10/05/2024 15:55",
-    duration: "00:14:28",
-    receiver: "linh.nguyen",
-    summary: "Phản ánh về dịch vụ chăm sóc khách hàng.",
-  },
-  {
-    phoneNumber: "0488 666 999",
-    dateTime: "10/05/2024 13:40",
-    duration: "00:06:15",
-    receiver: "minh.vu",
-    summary: "Hỏi về các chương trình khuyến mãi hiện tại.",
-  },
-  {
-    phoneNumber: "0399 111 555",
-    dateTime: "09/05/2024 16:10",
-    duration: "00:09:51",
-    receiver: "phuong.ho",
-    summary: "Yêu cầu thay đổi thông tin tài khoản.",
-  },
-  {
-    phoneNumber: "0277 888 222",
-    dateTime: "09/05/2024 12:25",
-    duration: "00:04:36",
-    receiver: "tuan.tran",
-    summary: "Tư vấn về gói dịch vụ phù hợp cho doanh nghiệp.",
-  },
-  {
-    phoneNumber: "0155 444 888",
-    dateTime: "09/05/2024 09:30",
-    duration: "00:07:18",
-    receiver: "linh.nguyen",
-    summary: "Hỗ trợ khôi phục mật khẩu tài khoản.",
-  },
-  {
-    phoneNumber: "0033 777 111",
-    dateTime: "08/05/2024 18:45",
-    duration: "00:12:04",
-    receiver: "minh.vu",
-    summary: "Khiếu nại về việc tính phí không chính xác.",
-  },
-];
+};
+
+// Helper functions
+const formatDateToApi = (date: Date, time: string = "00:00:00") => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${time}`;
+};
+
+const mapCallHistoryData = (callHistoryData: any[]) => {
+  return callHistoryData.map((item: any) => {
+    const callDateNum = typeof item.callDate === "number" ? item.callDate : 0;
+    const callDateMs = callDateNum > 1e12 ? callDateNum : callDateNum * 1000;
+    const durationNum = typeof item.duration === "number" ? item.duration : 0;
+    const durationMs = durationNum > 1e7 ? durationNum : durationNum * 1000;
+
+    return {
+      destination: item.destination,
+      duration: new Date(durationMs).toISOString().substr(11, 8),
+      dateTime: new Date(callDateMs).toLocaleString("vi-VN"),
+      agentName: item.agentName,
+      callType: item.callType,
+      mediaPath: item.mediaPath,
+    };
+  });
+};
+
+const getPageNumbers = (currentPage: number, totalPages: number) => {
+  const pages = [] as (number | "...")[];
+  const maxVisiblePages = 5;
+
+  if (totalPages <= maxVisiblePages) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else if (currentPage <= 3) {
+    pages.push(1, 2, 3, "...", totalPages);
+  } else if (currentPage >= totalPages - 2) {
+    pages.push(1, "...", totalPages - 2, totalPages - 1, totalPages);
+  } else {
+    pages.push(
+      1,
+      "...",
+      currentPage - 1,
+      currentPage,
+      currentPage + 1,
+      "...",
+      totalPages
+    );
+  }
+  return pages;
+};
+
+// Media action buttons component
+const MediaActions = ({ mediaPath }: { mediaPath: string }) => (
+  <>
+    <a
+      href={mediaPath}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-gray-600 hover:text-gray-800 transition-colors"
+      title="Nghe ghi âm"
+    >
+      <MDOutlinePlayArrow size={16} />
+    </a>
+    <a
+      href={mediaPath}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-gray-600 hover:text-gray-800 transition-colors"
+      title="Tải xuống"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <path
+          d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M7 10L12 15L17 10"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M12 15V3"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </a>
+    <a
+      href={mediaPath}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-gray-600 hover:text-gray-800 transition-colors"
+      title="Mở trong tab mới"
+    >
+      <MdOutlineGeneratingTokens size={16} />
+    </a>
+  </>
+);
+
+// Loading skeleton component
+const LoadingSkeleton = () => (
+  <>
+    {Array.from({ length: 5 }).map((_, idx) => (
+      <div
+        key={idx}
+        className="grid grid-cols-6 gap-4 items-center py-1 border-b border-slate-100 animate-pulse"
+      >
+        {Array.from({ length: 6 }).map((_, colIdx) => (
+          <div
+            key={colIdx}
+            className="h-4 bg-gray-200 rounded w-full"
+            style={{ minWidth: 0 }}
+          />
+        ))}
+      </div>
+    ))}
+  </>
+);
 
 // CallHistory page component
 export default function CallHistory() {
   const [searchPhone, setSearchPhone] = useState("");
-  const [selectedDate, setSelectedDate] = useState("");
-  const [filteredData, setFilteredData] = useState(callHistoryData);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [selectedCallType, setSelectedCallType] = useState<
+    "ALL" | "IN" | "OUT"
+  >("ALL");
+  const [filteredData, setFilteredData] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
-  // Calculate pagination
+  // Toast state for errors
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isToastVisible, setIsToastVisible] = useState(false);
+
+  // Load cached data on component mount
+  useEffect(() => {
+    storage.load().then((cached) => {
+      if (cached) {
+        setFilteredData(cached.data);
+        setHasSearched(cached.searchState.hasSearched);
+        setSearchPhone(cached.searchState.searchPhone || "");
+        setFromDate(cached.searchState.fromDate || "");
+        setToDate(cached.searchState.toDate || "");
+        setSelectedCallType(cached.searchState.selectedCallType || "ALL");
+      }
+    });
+  }, []);
+
+  // Fetch call history from API
+  const fetchCallHistory = async (filters?: {
+    phone?: string;
+    fromDate?: string;
+    toDate?: string;
+    callType?: "IN" | "OUT";
+  }) => {
+    setLoading(true);
+    setError(null);
+    try {
+      let fromDateTime = "",
+        toDateTime = "";
+      if (filters?.fromDate && filters?.toDate) {
+        fromDateTime = formatDateToApi(new Date(filters.fromDate), "00:00:00");
+        toDateTime = formatDateToApi(new Date(filters.toDate), "23:59:59");
+      } else if (filters?.fromDate) {
+        // Only from date provided - show all history from that date onwards
+        const fromDateObj = new Date(filters.fromDate);
+        fromDateTime = formatDateToApi(fromDateObj, "00:00:00");
+        // Set toDateTime to a far future date to get all calls from fromDate onwards
+        toDateTime = formatDateToApi(new Date(2100, 11, 31), "23:59:59");
+      } else if (filters?.toDate) {
+        // Only to date provided - show all history up to that date
+        const toDateObj = new Date(filters.toDate);
+        fromDateTime = formatDateToApi(new Date(1900, 0, 1), "00:00:00"); // Far past date
+        toDateTime = formatDateToApi(toDateObj, "23:59:59");
+      } else {
+        // No dates provided - use current date for both
+        const now = new Date();
+        fromDateTime = formatDateToApi(now, "00:00:00");
+        toDateTime = formatDateToApi(now, "23:59:59");
+      }
+
+      const params = {
+        fromDateTime: fromDateTime,
+        toDateTime: toDateTime,
+        callType: filters?.callType || undefined,
+        source: filters?.phone ? filters.phone.replace(/\s/g, "") : "",
+        destination: "",
+      };
+
+      const res = await getCallHistory(params);
+      const callHistoryData = (res.data as any)?.callHistory || res.data || [];
+      const mapped = mapCallHistoryData(callHistoryData);
+
+      setFilteredData(mapped);
+      setHasSearched(true);
+
+      await storage.save(mapped, {
+        hasSearched: true,
+        searchPhone: filters?.phone || "",
+        fromDate: filters?.fromDate || "",
+        toDate: filters?.toDate || "",
+        selectedCallType: filters?.callType || "ALL",
+      });
+    } catch (e: any) {
+      // Map error to Vietnamese messages and show toast
+      let errorMessage = "Lỗi khi tải lịch sử cuộc gọi";
+      if (e && e.message) {
+        if (
+          e.message.includes("Failed to fetch") ||
+          e.message.includes("NetworkError")
+        ) {
+          errorMessage = "Không thể kết nối đến máy chủ";
+        } else if (e.message.includes("401")) {
+          errorMessage = "Phiên đăng nhập đã hết hạn";
+          await storage.clear();
+        } else if (e.message.includes("500")) {
+          errorMessage = "Lỗi máy chủ nội bộ";
+        } else if (e.message.includes("404")) {
+          errorMessage = "Không tìm thấy dịch vụ";
+        } else if (e.message.includes("403")) {
+          errorMessage = "Không có quyền truy cập";
+        }
+      }
+      setError(errorMessage);
+      setFilteredData([]);
+      setHasSearched(false);
+      // Show toast instead of inline error
+      setToastMessage(errorMessage);
+      setIsToastVisible(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Event handlers
+  const handleSearch = () => {
+    fetchCallHistory({
+      phone: searchPhone.trim() ? searchPhone : undefined,
+      fromDate: fromDate || undefined,
+      toDate: toDate || undefined,
+      callType: selectedCallType !== "ALL" ? selectedCallType : undefined,
+    });
+    setCurrentPage(1);
+  };
+
+  const handleClearFilters = async () => {
+    setSearchPhone("");
+    setFromDate("");
+    setToDate("");
+    setSelectedCallType("ALL");
+    setCurrentPage(1);
+    setFilteredData([]);
+    setHasSearched(false);
+    await storage.clear();
+  };
+
+  // Pagination calculations
   const totalItems = filteredData.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentData = filteredData.slice(startIndex, endIndex);
-
-  // Handle search
-  const handleSearch = () => {
-    let filtered = callHistoryData;
-
-    // Filter by phone number if provided
-    if (searchPhone.trim()) {
-      const searchPhoneClean = searchPhone.toLowerCase().replace(/\s/g, "");
-      filtered = filtered.filter((call) => {
-        const callPhoneClean = call.phoneNumber
-          .toLowerCase()
-          .replace(/\s/g, "");
-        return callPhoneClean.includes(searchPhoneClean);
-      });
-    }
-
-    // Filter by date if provided
-    if (selectedDate) {
-      filtered = filtered.filter((call) => {
-        const callDate = new Date(
-          call.dateTime.split(" ")[0].split("/").reverse().join("-")
-        );
-        const selectedDateObj = new Date(selectedDate);
-        return callDate.toDateString() === selectedDateObj.toDateString();
-      });
-    }
-
-    setFilteredData(filtered);
-    setCurrentPage(1); // Reset to first page when filtering
-    console.log(
-      "Searching for:",
-      searchPhone,
-      "Date:",
-      selectedDate,
-      "Results:",
-      filtered.length
-    );
-  };
-
-  // Handle clear filters
-  const handleClearFilters = () => {
-    setSearchPhone("");
-    setSelectedDate("");
-    setFilteredData(callHistoryData);
-    setCurrentPage(1); // Reset to first page when clearing filters
-  };
-
-  // Handle page change
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  // Handle items per page change
-  const handleItemsPerPageChange = (items: number) => {
-    setItemsPerPage(items);
-    setCurrentPage(1); // Reset to first page when changing items per page
-  };
-
-  // Generate page numbers for pagination
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisiblePages = 5;
-
-    if (totalPages <= maxVisiblePages) {
-      // Show all pages if total is less than max visible
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      // Show first page, current page range, and last page with ellipsis
-      if (currentPage <= 3) {
-        pages.push(1, 2, 3, "...", totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        pages.push(1, "...", totalPages - 2, totalPages - 1, totalPages);
-      } else {
-        pages.push(
-          1,
-          "...",
-          currentPage - 1,
-          currentPage,
-          currentPage + 1,
-          "...",
-          totalPages
-        );
-      }
-    }
-
-    return pages;
-  };
+  const currentData = filteredData.slice(startIndex, startIndex + itemsPerPage);
 
   return (
     <div className="flex-1 p-8">
@@ -265,12 +405,9 @@ export default function CallHistory() {
 
       {/* Search and filter section */}
       <div className="flex gap-3 mb-8">
-        {/* Phone number search */}
         <div className="bg-white h-10 rounded-[15px] border border-slate-200 flex items-center w-[211px]">
           <div className="flex items-center justify-center w-[37.5px] h-full">
-            <div className="flex items-center gap-[5px] px-1.5 py-1">
-              <Search className="w-[15px] h-[15px] text-gray-400" />
-            </div>
+            <Search className="w-[15px] h-[15px] text-gray-400" />
           </div>
           <input
             type="text"
@@ -281,22 +418,48 @@ export default function CallHistory() {
           />
         </div>
 
-        {/* Date picker */}
-        <div className="bg-white h-10 rounded-[15px] border border-slate-200 flex items-center w-[210px]">
+        <div className="bg-white h-10 rounded-[15px] border border-slate-200 flex items-center w-[180px] relative">
+          <div className="absolute -top-5 left-2 text-[#718096] text-[10px] font-medium">
+            Từ ngày
+          </div>
           <div className="flex items-center justify-center w-[37.5px] h-full">
-            <div className="flex items-center gap-[5px] px-1.5 py-1">
-              <Calendar className="w-4 h-4 text-gray-400" />
-            </div>
+            <Calendar className="w-4 h-4 text-gray-400" />
           </div>
           <input
             type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
             className="flex-1 px-3 text-[12px] text-[#a0aec0] placeholder:text-[#a0aec0] focus:outline-none"
           />
         </div>
 
-        {/* Search button */}
+        <div className="bg-white h-10 rounded-[15px] border border-slate-200 flex items-center w-[180px] relative">
+          <div className="absolute -top-5 left-2 text-[#718096] text-[10px] font-medium">
+            Đến ngày
+          </div>
+          <div className="flex items-center justify-center w-[37.5px] h-full">
+            <Calendar className="w-4 h-4 text-gray-400" />
+          </div>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="flex-1 px-3 text-[12px] text-[#a0aec0] placeholder:text-[#a0aec0] focus:outline-none"
+          />
+        </div>
+
+        <select
+          value={selectedCallType}
+          onChange={(e) =>
+            setSelectedCallType(e.target.value as "ALL" | "IN" | "OUT")
+          }
+          className="bg-white h-10 rounded-[15px] border border-slate-200 flex items-center w-[140px] px-3 text-[12px] text-[#2d3748] focus:outline-none"
+        >
+          <option value="ALL">Tất cả</option>
+          <option value="IN">IN</option>
+          <option value="OUT">OUT</option>
+        </select>
+
         <button
           onClick={handleSearch}
           className="bg-[#2b6cb0] text-white text-[12px] font-bold h-10 px-2 rounded-xl hover:bg-[#2c5aa0] transition-colors shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] w-[96px]"
@@ -304,8 +467,7 @@ export default function CallHistory() {
           Tìm kiếm
         </button>
 
-        {/* Clear filters button */}
-        {(searchPhone || selectedDate) && (
+        {(searchPhone || fromDate || toDate) && (
           <button
             onClick={handleClearFilters}
             className="bg-gray-200 text-gray-600 text-[12px] font-bold h-10 px-4 rounded-xl hover:bg-gray-300 transition-colors"
@@ -315,58 +477,76 @@ export default function CallHistory() {
         )}
       </div>
 
+      {/* Loading and error states */}
+      {loading && (
+        <div className="mb-4 text-[#3182ce] text-[12px]">
+          Đang tải dữ liệu...
+        </div>
+      )}
+      {/* Removed inline error message in favor of toast */}
+
       {/* Results count */}
-      {filteredData.length !== callHistoryData.length && (
+      {!loading && !error && hasSearched && (
         <div className="mb-4">
           <p className="text-[#718096] text-[12px]">
-            Tìm thấy {filteredData.length} kết quả
-            {filteredData.length === 0 && " - Không có kết quả nào phù hợp"}
+            {filteredData.length > 0
+              ? `Tìm thấy ${filteredData.length} kết quả`
+              : "Không có kết quả nào phù hợp"}
           </p>
         </div>
       )}
 
       {/* Call history table */}
-      <div className="bg-white rounded-[15px] shadow-[0px_3.5px_5.5px_0px_rgba(0,0,0,0.02)] p-4">
-        {/* Table headers */}
-        <div className="grid grid-cols-6 gap-4 text-[#a0aec0] text-[12px] font-bold mb-3 pb-1 border-b border-slate-200">
-          <div>Số điện thoại</div>
-          <div>Ngày giờ</div>
-          <div>Thời lượng</div>
-          <div>Người nhận</div>
-          <div>Ghi âm</div>
-          <div>Tóm tắt</div>
+      <div className="bg-white rounded-[15px] shadow-[0px_3.5px_5.5px_0px_rgba(0,0,0,0.02)] p-4 overflow-x-auto">
+        <div className="min-w-[1000px]">
+          {/* Table headers */}
+          <div className="grid grid-cols-6 gap-4 text-[#a0aec0] text-[12px] font-bold mb-3 pb-1 border-b border-slate-200">
+            <div>Số điện thoại</div>
+            <div>Thời lượng</div>
+            <div>Ngày giờ</div>
+            <div>Người nhận</div>
+            <div>Loại cuộc gọi</div>
+            <div>Ghi âm</div>
+          </div>
+
+          {/* Table rows */}
+          <div className="space-y-1">
+            {loading ? (
+              <LoadingSkeleton />
+            ) : (
+              hasSearched &&
+              currentData.map((call, index) => (
+                <div
+                  key={index}
+                  className="grid grid-cols-6 gap-4 items-center py-1 border-b border-slate-100"
+                >
+                  <div className="text-[#718096] text-[14px]">
+                    {call.destination}
+                  </div>
+                  <div className="text-[#718096] text-[14px]">
+                    {call.duration}
+                  </div>
+                  <div className="text-[#718096] text-[14px]">
+                    {call.dateTime}
+                  </div>
+                  <div className="text-[#718096] text-[14px]">
+                    {call.agentName}
+                  </div>
+                  <div className="text-[#718096] text-[12px]">
+                    {call.callType}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {call.mediaPath && (
+                      <MediaActions mediaPath={call.mediaPath} />
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
-        {/* Table rows */}
-        <div className="space-y-1">
-          {currentData.map((call, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-6 gap-4 items-center py-1 border-b border-slate-100"
-            >
-              <div className="text-[#718096] text-[14px]">
-                {call.phoneNumber}
-              </div>
-              <div className="text-[#718096] text-[14px]">{call.dateTime}</div>
-              <div className="text-[#718096] text-[14px]">{call.duration}</div>
-              <div className="text-[#718096] text-[14px]">{call.receiver}</div>
-              <div className="flex gap-3">
-                <button className="text-[#718096] hover:text-[#4a5568] transition-colors">
-                  <MDOutlinePlayArrow size={16} title="Phát ghi âm" />
-                </button>
-                <button className="text-[#718096] hover:text-[#4a5568] transition-colors">
-                  <Download className="w-4 h-4" />
-                </button>
-                <button className="text-[#718096] hover:text-[#4a5568] transition-colors">
-                  <MdOutlineGeneratingTokens size={16} title="Tạo báo cáo" />
-                </button>
-              </div>
-              <div className="text-[#718096] text-[12px]">{call.summary}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Dynamic Pagination */}
+        {/* Pagination */}
         <div className="flex justify-between items-center mt-3">
           <div className="flex items-center gap-[22px] text-[#4a5568] text-[12px]">
             <span>Tổng cộng {totalItems}</span>
@@ -374,9 +554,10 @@ export default function CallHistory() {
               <select
                 className="appearance-none bg-white border border-[#cbd5e0] rounded-xl px-3 h-8 text-[#2d3748] text-[12px] pr-8"
                 value={itemsPerPage}
-                onChange={(e) =>
-                  handleItemsPerPageChange(Number(e.target.value))
-                }
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
               >
                 <option value="5">5</option>
                 <option value="10">10</option>
@@ -396,10 +577,9 @@ export default function CallHistory() {
           </div>
 
           <div className="flex gap-2">
-            {/* Previous button */}
             <button
               className="w-8 h-8 flex items-center justify-center rounded-md text-[#718096] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 disabled:hover:bg-transparent"
-              onClick={() => handlePageChange(currentPage - 1)}
+              onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
               title="Trang trước"
             >
@@ -414,8 +594,7 @@ export default function CallHistory() {
               </svg>
             </button>
 
-            {/* Page numbers */}
-            {getPageNumbers().map((page, index) => (
+            {getPageNumbers(currentPage, totalPages).map((page, index) => (
               <button
                 key={index}
                 className={`w-8 h-8 flex items-center justify-center text-[12px] transition-colors ${
@@ -426,7 +605,7 @@ export default function CallHistory() {
                     : "rounded-md text-[#718096] hover:bg-gray-100"
                 }`}
                 onClick={() =>
-                  typeof page === "number" ? handlePageChange(page) : undefined
+                  typeof page === "number" ? setCurrentPage(page) : undefined
                 }
                 disabled={page === "..."}
                 title={typeof page === "number" ? `Trang ${page}` : undefined}
@@ -435,10 +614,9 @@ export default function CallHistory() {
               </button>
             ))}
 
-            {/* Next button */}
             <button
               className="w-8 h-8 flex items-center justify-center rounded-md text-[#718096] rotate-180 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 disabled:hover:bg-transparent"
-              onClick={() => handlePageChange(currentPage + 1)}
+              onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages}
               title="Trang tiếp"
             >
@@ -455,6 +633,16 @@ export default function CallHistory() {
           </div>
         </div>
       </div>
+
+      {/* Toast notification for errors */}
+      {toastMessage && (
+        <Toast
+          message={toastMessage}
+          isVisible={isToastVisible}
+          onClose={() => setIsToastVisible(false)}
+          type="error"
+        />
+      )}
     </div>
   );
 }
