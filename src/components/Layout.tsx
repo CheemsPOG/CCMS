@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Phone, BarChart3, User, LogOut } from "lucide-react";
+import { Home, Phone, BarChart3, User } from "lucide-react";
 import StatusDropdown from "./StatusDropdown";
-<<<<<<< HEAD
-<<<<<<< HEAD
 import AiOutlineLogout from "./ui/ai-outline-logout";
 import { getAgentStatus, logoutAgent } from "../lib/api";
 import Toast from "./ui/toast";
@@ -82,10 +80,6 @@ const statusCodeToString = (code: string): string => {
       return "Không rõ";
   }
 };
-=======
->>>>>>> parent of bb00de5 (Remove unused images and UI components; update CallHistory to use new icons.)
-=======
->>>>>>> parent of bb00de5 (Remove unused images and UI components; update CallHistory to use new icons.)
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -434,7 +428,11 @@ export default function Layout({ children }: LayoutProps) {
               title={isCollapsed ? "Đăng xuất" : ""}
             >
               <div className="rounded-xl w-[30px] h-[30px] flex items-center justify-center bg-white">
-                <LogOut className="w-[15px] h-[15px] text-[#2b6cb0]" />
+                <AiOutlineLogout
+                  size={15}
+                  className="text-[#2b6cb0]"
+                  title="Đăng xuất"
+                />
               </div>
               {!isCollapsed && (
                 <span className="text-[12px] font-bold text-[#a0aec0]">

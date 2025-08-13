@@ -220,6 +220,8 @@ export default function StatusDropdown({
           errorMessage = "Không có quyền truy cập";
         } else if (e.message.includes("400")) {
           errorMessage = "Dữ liệu không hợp lệ";
+        } else if (e.message.includes("429")) {
+          errorMessage = "Quá nhiều yêu cầu, vui lòng thử lại sau";
         } else {
           errorMessage = "Lỗi khi đổi trạng thái";
         }
