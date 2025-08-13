@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Home, Phone, BarChart3, User, LogOut } from "lucide-react";
 import StatusDropdown from "./StatusDropdown";
 <<<<<<< HEAD
+<<<<<<< HEAD
 import AiOutlineLogout from "./ui/ai-outline-logout";
 import { getAgentStatus, logoutAgent } from "../lib/api";
 import Toast from "./ui/toast";
@@ -81,6 +82,8 @@ const statusCodeToString = (code: string): string => {
       return "Không rõ";
   }
 };
+=======
+>>>>>>> parent of bb00de5 (Remove unused images and UI components; update CallHistory to use new icons.)
 =======
 >>>>>>> parent of bb00de5 (Remove unused images and UI components; update CallHistory to use new icons.)
 

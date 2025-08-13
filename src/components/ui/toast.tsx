@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 import { useEffect } from "react";
 import { X, CheckCircle } from "lucide-react";
 
@@ -76,6 +77,8 @@ export default function Toast({
     </div>
   );
 =======
+=======
+>>>>>>> parent of bb00de5 (Remove unused images and UI components; update CallHistory to use new icons.)
 import * as React from "react"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cva, type VariantProps } from "class-variance-authority"
@@ -202,5 +205,8 @@ export {
   ToastDescription,
   ToastClose,
   ToastAction,
+<<<<<<< HEAD
+>>>>>>> parent of bb00de5 (Remove unused images and UI components; update CallHistory to use new icons.)
+=======
 >>>>>>> parent of bb00de5 (Remove unused images and UI components; update CallHistory to use new icons.)
 }

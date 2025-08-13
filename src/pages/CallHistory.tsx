@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 import { useState, useEffect } from "react";
 import { Search, Calendar } from "lucide-react";
 import MDOutlinePlayArrow from "../components/ui/md-outline-play-arrow";
@@ -6,6 +7,10 @@ import MdOutlineGeneratingTokens from "../components/ui/md-outline-generating-to
 import { getCallHistory } from "../lib/api";
 import { clearCallHistoryCache } from "../lib/cache";
 import Toast from "../components/ui/toast";
+=======
+import { useState } from "react";
+import { Search, Calendar, Play, Download, FileText } from "lucide-react";
+>>>>>>> parent of bb00de5 (Remove unused images and UI components; update CallHistory to use new icons.)
 =======
 import { useState } from "react";
 import { Search, Calendar, Play, Download, FileText } from "lucide-react";
